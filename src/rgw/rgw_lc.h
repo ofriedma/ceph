@@ -84,9 +84,7 @@ public:
     return days.empty() && date.empty();
   }
   bool valid() const {
-    if (!days.empty() && !date.empty()) {
-      return false;
-    } else if (!days.empty() && get_days() < 0) {
+    if (!days.empty() && (!date.empty() || get_days() <= 0)) {
       return false;
     }
     //We've checked date in xml parsing
@@ -128,9 +126,7 @@ public:
   }
 
   bool valid() const {
-    if (!days.empty() && !date.empty()) {
-      return false;
-    } else if (!days.empty() && get_days() < 0) {
+    if (!days.empty() && (!date.empty() || get_days() < 0)) {
       return false;
     }
     //We've checked date in xml parsing
