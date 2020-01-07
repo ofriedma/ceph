@@ -88,6 +88,7 @@ public:
       return false;
     }
     //We've checked date in xml parsing
+
     return true;
   }
 };
