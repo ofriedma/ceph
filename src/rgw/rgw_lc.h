@@ -84,13 +84,7 @@ public:
     return days.empty() && date.empty();
   }
   bool valid() const {
-    if (!days.empty() && !date.empty()) {
-      return false;
-    } else if (!days.empty() && get_days() <= 0) {
-      return false;
-    }
-    //We've checked date in xml parsing
-    return true;
+    return days.empty() || (date.empty() && get_days() > 0);
   }
 };
 WRITE_CLASS_ENCODER(LCExpiration)
@@ -128,13 +122,7 @@ public:
   }
 
   bool valid() const {
-    if (!days.empty() && !date.empty()) {
-      return false;
-    } else if (!days.empty() && get_days() < 0) {
-      return false;
-    }
-    //We've checked date in xml parsing
-    return true;
+    return days.empty() || (date.empty() && get_days() >= 0);
   }
 
   void encode(bufferlist& bl) const {
