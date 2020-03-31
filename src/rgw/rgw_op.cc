@@ -2143,7 +2143,7 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 bool RGWGetObj::prefetch_data()
 {
   /* HEAD request, stop prefetch*/
-  if (!get_data) {
+  if (!get_data|| s->info.env->exists("HTTP_X_RGW_AUTH")) {
     return false;
   }
 
@@ -2233,6 +2233,10 @@ void RGWGetObj::execute()
   if (op_ret < 0)
     goto done_err;
 
+  if (s->info.env->exists("HTTP_X_RGW_AUTH")) {
+    op_ret = 0;
+    goto done_err;
+  }
   read_op.conds.mod_ptr = mod_ptr;
   read_op.conds.unmod_ptr = unmod_ptr;
   read_op.conds.high_precision_time = s->system_request; /* system request need to use high precision time */

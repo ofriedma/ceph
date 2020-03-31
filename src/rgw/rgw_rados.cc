@@ -81,7 +81,7 @@ using namespace librados;
 #include "services/svc_bucket.h"
 #include "services/svc_mdlog.h"
 #include "services/svc_datalog_rados.h"
-
+#include "boost/unordered_map.hpp"
 #include "compressor/Compressor.h"
 
 #ifdef WITH_LTTNG
@@ -97,7 +97,7 @@ using namespace librados;
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-
+static boost::unordered_map<std::string,RGWObjState> caching;
 static string shadow_ns = "shadow";
 static string default_bucket_index_pool_suffix = "rgw.buckets.index";
 static string default_storage_extra_pool_suffix = "rgw.buckets.non-ec";
@@ -217,6 +217,7 @@ RGWObjState::RGWObjState(const RGWObjState& rhs) : obj (rhs.obj) {
   is_olh = rhs.is_olh;
   objv_tracker = rhs.objv_tracker;
   pg_ver = rhs.pg_ver;
+  attrset = rhs.attrset;
 }
 
 RGWObjState *RGWObjectCtx::get_state(const rgw_obj& obj) {
@@ -4665,6 +4666,9 @@ int RGWRados::bucket_suspended(rgw_bucket& bucket, bool *suspended)
 
 int RGWRados::Object::complete_atomic_modification()
 {
+  auto xyz = caching.find(state->obj.bucket.marker + "_" + state->obj.key.name);
+  if(xyz != caching.end())
+    caching.erase(xyz);
   if ((!state->manifest)|| state->keep_tail)
     return 0;
 
@@ -5538,6 +5542,7 @@ int RGWRados::Object::prepare_atomic_modification(ObjectWriteOperation& op, bool
                                                   bool modify_tail, optional_yield y)
 {
   int r = get_state(&state, false, y);
+  //caching.erase(caching.find("blah"));
   if (r < 0)
     return r;
 
@@ -6347,6 +6352,12 @@ int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx,
   obj_to_raw(bucket_info.placement_rule, obj, &head_obj);
 
   int r = get_obj_state(&obj_ctx, bucket_info, obj, &astate, false, y);
+  if(reading_from_head && caching.find(astate->obj.bucket.marker + "_" + astate->obj.key.name) == caching.end())
+  {
+    auto a = RGWObjState(*astate);
+    caching.insert({{astate->obj.bucket.marker + "_" + astate->obj.key.name,a}});
+    ldout(cct, 0) << "head size " << ofs << dendl;
+  }
   if (r < 0) {
     return r;
   }
@@ -6358,7 +6369,11 @@ int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx,
 
   if (astate->manifest) {
     /* now get the relevant object stripe */
+    auto xxx = caching.find(astate->obj.bucket.marker + "_" + astate->obj.key.name);
+    if(caching.find(astate->obj.bucket.marker + "_" + astate->obj.key.name) != caching.end())
+      astate->manifest = xxx->second.manifest; 
     RGWObjManifest::obj_iterator iter = astate->manifest->obj_find(ofs);
+ 
 
     RGWObjManifest::obj_iterator obj_end = astate->manifest->obj_end();
 
@@ -6376,6 +6391,12 @@ int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx,
         }
 
         reading_from_head = (read_obj == head_obj);
+          if(reading_from_head && caching.find(astate->obj.bucket.marker + "_" + astate->obj.key.name) == caching.end())
+          {
+            auto a = RGWObjState(*astate);
+            caching.insert({{astate->obj.bucket.marker + "_" + astate->obj.key.name,a}});
+            ldout(cct, 0) << "head size " << ofs << dendl;
+          }
         r = cb(read_obj, ofs, read_ofs, read_len, reading_from_head, astate, arg);
 	if (r < 0) {
 	  return r;
@@ -7417,29 +7438,53 @@ int RGWRados::raw_obj_stat(rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime,
   if (r < 0) {
     return r;
   }
-
+  ldout(cct, 20) << "caching size: " << caching.size() << dendl;
+  auto tryme = caching.find(obj.oid);
+  bool is_cached = (tryme != caching.end());
   map<string, bufferlist> unfiltered_attrset;
   uint64_t size = 0;
   struct timespec mtime_ts;
+  if(is_cached)
+  {
+    ldout(cct, 20) << "keep tail: " << tryme->second.keep_tail << dendl;
+  }
 
   ObjectReadOperation op;
   if (objv_tracker) {
     objv_tracker->prepare_op_for_read(&op);
   }
-  if (attrs) {
+  if (attrs && !is_cached) {
     op.getxattrs(&unfiltered_attrset, NULL);
   }
-  if (psize || pmtime) {
+  else if(attrs) {
+    unfiltered_attrset = tryme->second.attrset;
+  }
+  if ((psize || pmtime) && !is_cached) {
     op.stat2(&size, &mtime_ts, NULL);
   }
-  if (first_chunk) {
+  else if(psize || pmtime)
+  {
+    size = tryme->second.size;
+    *pmtime = tryme->second.mtime;
+  }
+  if (first_chunk && !is_cached) {
     op.read(0, cct->_conf->rgw_max_chunk_size, first_chunk, NULL);
   }
-  bufferlist outbl;
-  r = rgw_rados_operate(ref.pool.ioctx(), ref.obj.oid, &op, &outbl, null_yield);
-
-  if (epoch) {
+  else if(first_chunk)
+  {
+    *first_chunk = tryme->second.data;
+  }
+  if(!is_cached)
+  {
+    bufferlist outbl;
+    r = rgw_rados_operate(ref.pool.ioctx(), ref.obj.oid, &op, &outbl, null_yield);
+  }
+  if (epoch && !is_cached) {
     *epoch = ref.pool.ioctx().get_last_version();
+  }
+  else if(epoch)
+  {
+    *epoch = tryme->second.epoch;
   }
 
   if (r < 0)
@@ -7447,7 +7492,7 @@ int RGWRados::raw_obj_stat(rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime,
 
   if (psize)
     *psize = size;
-  if (pmtime)
+  if (pmtime && !is_cached)
     *pmtime = ceph::real_clock::from_timespec(mtime_ts);
   if (attrs) {
     rgw_filter_attrset(unfiltered_attrset, RGW_ATTR_PREFIX, attrs);
