@@ -2390,6 +2390,10 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
   sl.unlock();
   put_session(s);
 
+ if ((cct->_conf->rgw_fastfail_homeless_timeout > 0) && s->is_homeless()) { 
+     uint64_t t = timer.add_event(ceph::make_timespan(cct->_conf->rgw_fastfail_homeless_timeout), [this, tid]() {_op_cancel(tid, -ETIMEDOUT);});
+     ldout(cct, 0) << __func__ << " Op cancellation due to homeless session. t =" << t << dendl;
+  }
   ldout(cct, 5) << num_in_flight << " in flight" << dendl;
 }
 
