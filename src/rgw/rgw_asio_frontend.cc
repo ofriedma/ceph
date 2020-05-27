@@ -20,7 +20,7 @@
 
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
 #include <boost/asio/ssl.hpp>
-
+#include <boost/beast/ssl/ssl_stream.hpp>
 #include "services/svc_config_key.h"
 #include "services/svc_zone.h"
 
@@ -65,6 +65,8 @@ class StreamIO : public rgw::asio::ClientIO {
 
   size_t write_data(const char* buf, size_t len) override {
     boost::system::error_code ec;
+    auto& timeout = get_lowest_layer(stream);
+    timeout.expires_after(std::chrono::seconds(request_timeout));
     auto bytes = boost::asio::async_write(stream, boost::asio::buffer(buf, len),
                                           yield[ec]);
     if (ec) {
@@ -75,6 +77,7 @@ class StreamIO : public rgw::asio::ClientIO {
   }
 
   size_t recv_body(char* buf, size_t max) override {
+    auto& timeout = get_lowest_layer(stream);
     auto& message = parser.get();
     auto& body_remaining = message.body();
     body_remaining.data = buf;
@@ -82,6 +85,7 @@ class StreamIO : public rgw::asio::ClientIO {
 
     while (body_remaining.size && !parser.is_done()) {
       boost::system::error_code ec;
+      timeout.expires_after(std::chrono::seconds(request_timeout));
       http::async_read_some(stream, buffer, parser, yield[ec]);
       if (ec == http::error::need_buffer) {
         break;
@@ -119,8 +123,11 @@ void handle_connection(boost::asio::io_context& context,
     rgw::asio::parser_type parser;
     parser.header_limit(header_limit);
     parser.body_limit(body_limit);
+    auto& timeout = get_lowest_layer(stream);
+    
 
     // parse the header
+    timeout.expires_after(std::chrono::seconds(request_timeout));
     http::async_read_header(stream, buffer, parser, yield[ec]);
     if (ec == boost::asio::error::connection_reset ||
         ec == boost::asio::error::bad_descriptor ||
@@ -139,6 +146,7 @@ void handle_connection(boost::asio::io_context& context,
       response.result(http::status::bad_request);
       response.version(message.version() == 10 ? 10 : 11);
       response.prepare_payload();
+      timeout.expires_after(std::chrono::seconds(request_timeout));
       http::async_write(stream, response, yield[ec]);
       if (ec) {
         ldout(cct, 5) << "failed to write response: " << ec.message() << dendl;
@@ -159,7 +167,7 @@ void handle_connection(boost::asio::io_context& context,
       // process the request
       RGWRequest req{env.store->getRados()->get_new_req_id()};
 
-      auto& socket = stream.lowest_layer();
+      auto& socket = get_lowest_layer(stream).socket();
       const auto& remote_endpoint = socket.remote_endpoint(ec);
       if (ec) {
         ldout(cct, 1) << "failed to connect client: " << ec.message() << dendl;
@@ -194,6 +202,7 @@ void handle_connection(boost::asio::io_context& context,
       body.size = discard_buffer.size();
       body.data = discard_buffer.data();
 
+      timeout.expires_after(std::chrono::seconds(request_timeout));
       http::async_read_some(stream, buffer, parser, yield[ec]);
       if (ec == http::error::need_buffer) {
         continue;
@@ -253,6 +262,7 @@ class AsioFrontend {
   RGWProcessEnv env;
   RGWFrontendConfig* conf;
   boost::asio::io_context context;
+  size_t request_timeout;
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
   boost::optional<ssl::context> ssl_context;
   int get_config_key_val(string name,
@@ -411,6 +421,9 @@ int AsioFrontend::init()
 {
   boost::system::error_code ec;
   auto& config = conf->get_config_map();
+// Setting global timeout
+  auto timeout = config.find("request_timeout_ms");
+  request_timeout = timeout != config.end() ? std::strtoul(timeout->second.c_str(), NULL, 10)/1000 : request_timeout;
 
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
   int r = init_ssl();
@@ -792,11 +805,14 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
       [this, s=std::move(socket)] (spawn::yield_context yield) mutable {
         Connection conn{s};
         auto c = connections.add(conn);
-        // wrap the socket in an ssl stream
-        ssl::stream<tcp::socket&> stream{s, *ssl_context};
+        
+        boost::beast::tcp_stream timeout_stream((std::move(s)));
+        // wrap the tcp_stream in an ssl stream
+        boost::beast::ssl_stream<boost::beast::tcp_stream&> stream{timeout_stream, *ssl_context};
         auto buffer = std::make_unique<parse_buffer>();
         // do ssl handshake
         boost::system::error_code ec;
+        get_lowest_layer(stream).expires_after(std::chrono::seconds(request_timeout));
         auto bytes = stream.async_handshake(ssl::stream_base::server,
                                             buffer->data(), yield[ec]);
         if (ec) {
@@ -822,9 +838,10 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         auto c = connections.add(conn);
         auto buffer = std::make_unique<parse_buffer>();
         boost::system::error_code ec;
-        handle_connection(context, env, s, *buffer, false, pause_mutex,
+        boost::beast::tcp_stream stream((std::move(s)));
+        handle_connection(context, env, stream, *buffer, false, pause_mutex,
                           scheduler.get(), ec, yield);
-        s.shutdown(tcp::socket::shutdown_both, ec);
+        stream.socket().shutdown(tcp::socket::shutdown_both, ec);
       }, make_stack_allocator());
   }
 }
