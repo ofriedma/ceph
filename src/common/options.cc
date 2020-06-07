@@ -2349,6 +2349,12 @@ std::vector<Option> get_global_options() {
     .set_default(10.0)
     .set_description("Seconds before in-flight op is considered 'laggy' and we query mon for the latest OSDMap"),
 
+    Option("objecter_homeless_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("Timeout homeless session : Duration (in fractional seconds) after which the op is cancelled")
+    .set_long_description("It will cancel the op associated with a homeless session after the specified duration."
+                          "Homeless session means that there is no availiable osd in the PG to process the I/O"),
+
     Option("objecter_inflight_op_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(100_M)
     .set_description("Max in-flight data in bytes (both directions)"),
@@ -6938,11 +6944,6 @@ std::vector<Option> get_rgw_options() {
 			  "This seems to be an issue mostly for large numbers "
 			  "of RGW instances under heavy use. If you would like "
 			  "to turn off cache expiry, set this value to zero."),
-
-Option("rgw_fastfail_homeless_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-.set_default(0.01)
-.set_description("Fastfail homeless session : Duration (in millisecondss) after which the op is cancelled")
-.set_long_description("It will cancel the op associated with a homeless session after the specified  duration. This will unblock the radosgw thread to take new client requests."),
 
     Option("rgw_inject_notify_timeout_probability", Option::TYPE_FLOAT,
 	   Option::LEVEL_DEV)

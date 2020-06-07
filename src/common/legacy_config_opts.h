@@ -383,6 +383,7 @@ OPTION(crush_location_hook_timeout, OPT_INT)
 
 OPTION(objecter_tick_interval, OPT_DOUBLE)
 OPTION(objecter_timeout, OPT_DOUBLE)    // before we ask for a map
+OPTION(objecter_homeless_timeout, OPT_FLOAT) // timeout homeless sessions
 OPTION(objecter_inflight_op_bytes, OPT_U64) // max in-flight data (both directions)
 OPTION(objecter_inflight_ops, OPT_U64)               // max in-flight ios
 OPTION(objecter_completion_locks_per_session, OPT_U64) // num of completion locks per each session, for serializing same object responses
@@ -1562,6 +1563,3 @@ OPTION(debug_allow_any_pool_priority, OPT_BOOL)
 OPTION(rgw_gc_max_deferred_entries_size, OPT_U64) // GC deferred entries size in queue head
 OPTION(rgw_gc_max_queue_size, OPT_U64) // GC max queue size
 OPTION(rgw_gc_max_deferred, OPT_U64) // GC max number of deferred entries
-
-/* Fastfail tunables */
-OPTION(rgw_fastfail_homeless_timeout, OPT_FLOAT)
