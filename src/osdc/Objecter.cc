@@ -2390,16 +2390,6 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
   sl.unlock();
   put_session(s);
 
-  if ((cct->_conf->objecter_homeless_timeout > 0) && s->is_homeless()) { 
-    timer.add_event(ceph::make_timespan(cct->_conf->objecter_homeless_timeout), [this, tid, s]() {
-      if (s && s->is_homeless()) {
-        _op_cancel(tid, -ETIMEDOUT);
-        ldout(cct, 0) << __func__ << " Op cancellation due to homeless session timeout" << dendl; 
-      } else {
-        ldout(cct, 20) << __func__ << " Session is not homeless" << dendl; 
-      }
-    }); 
-  }
   ldout(cct, 5) << num_in_flight << " in flight" << dendl;
 }
 
@@ -2933,10 +2923,21 @@ void Objecter::_session_op_assign(OSDSession *to, Op *op)
   op->session = to;
   to->ops[op->tid] = op;
 
-  if (to->is_homeless()) {
-    num_homeless_ops++;
+  if(op->on_noosd_timeout && (! to->is_homeless())){
+    timer.cancel_event(op->on_noosd_timeout);
+    op->on_noosd_timeout = 0;
+    ldout(cct, 0) << __func__ << " session timeout cancelled" << dendl;
   }
 
+  if (to->is_homeless()) {
+    num_homeless_ops++;
+    if (cct->_conf->objecter_homeless_timeout > 0) {
+      op->on_noosd_timeout = timer.add_event(ceph::make_timespan(cct->_conf->objecter_homeless_timeout), [this, tid = op->tid]() {
+        _op_cancel(tid, -ETIMEDOUT);
+        ldout(cct, 0) << __func__ << " Op cancellation due to session timeout" << dendl;
+      });
+    }
+  }
   ldout(cct, 15) << __func__ << " " << to->osd << " " << op->tid << dendl;
 }
 
