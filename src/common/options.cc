@@ -2352,7 +2352,7 @@ std::vector<Option> get_global_options() {
     Option("objecter_homeless_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("Timeout homeless session : Duration (in fractional seconds) after which the op is cancelled")
-    .set_long_description("It will cancel the op associated with a homeless session after the specified duration."
+    .set_long_description("It will cancel the op associated with a homeless session after the specified duration. "
                           "Homeless session means that there is no availiable osd in the PG to process the I/O"),
 
     Option("objecter_inflight_op_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)

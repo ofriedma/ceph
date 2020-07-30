@@ -2923,18 +2923,12 @@ void Objecter::_session_op_assign(OSDSession *to, Op *op)
   op->session = to;
   to->ops[op->tid] = op;
 
-  if(op->on_noosd_timeout && (! to->is_homeless())){
-    timer.cancel_event(op->on_noosd_timeout);
-    op->on_noosd_timeout = 0;
-    ldout(cct, 0) << __func__ << " session timeout cancelled" << dendl;
-  }
-
   if (to->is_homeless()) {
     num_homeless_ops++;
     if (cct->_conf->objecter_homeless_timeout > 0) {
       op->on_noosd_timeout = timer.add_event(ceph::make_timespan(cct->_conf->objecter_homeless_timeout), [this, tid = op->tid]() {
         _op_cancel(tid, -ETIMEDOUT);
-        ldout(cct, 0) << __func__ << " Op cancellation due to session timeout" << dendl;
+        ldout(cct, 5) << __func__ << " Op cancellation due to session timeout" << dendl;
       });
     }
   }
@@ -2948,6 +2942,11 @@ void Objecter::_session_op_remove(OSDSession *from, Op *op)
 
   if (from->is_homeless()) {
     num_homeless_ops--;
+    if (op->on_noosd_timeout) {
+      timer.cancel_event(op->on_noosd_timeout);
+      op->on_noosd_timeout = 0;
+      ldout(cct, 5) << __func__ << " session timeout cancelled" << dendl;
+    }
   }
 
   from->ops.erase(op->tid);
