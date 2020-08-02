@@ -2927,8 +2927,8 @@ void Objecter::_session_op_assign(OSDSession *to, Op *op)
     num_homeless_ops++;
     if (cct->_conf->objecter_homeless_timeout > 0) {
       op->on_noosd_timeout = timer.add_event(ceph::make_timespan(cct->_conf->objecter_homeless_timeout), [this, tid = op->tid]() {
-        _op_cancel(tid, -ETIMEDOUT);
-        ldout(cct, 5) << __func__ << " Op cancellation due to session timeout" << dendl;
+        op_cancel(tid, -ETIMEDOUT);
+        ldout(cct, 5) << "_session_op_assign" << " Op cancellation due to session timeout" << dendl;
       });
     }
   }
@@ -2945,7 +2945,7 @@ void Objecter::_session_op_remove(OSDSession *from, Op *op)
     if (op->on_noosd_timeout) {
       timer.cancel_event(op->on_noosd_timeout);
       op->on_noosd_timeout = 0;
-      ldout(cct, 5) << __func__ << " session timeout cancelled" << dendl;
+      ldout(cct, 20) << __func__ << " session timeout cancelled or timedout" << dendl;
     }
   }
 
