@@ -231,6 +231,9 @@ void Objecter::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("rados_osd_op_timeout")) {
     osd_timeout = conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
   }
+  if (changed.count("objecter_fastfail_timeout")) {
+    objecter_fastfail_timeout = conf.get_val<std::chrono::seconds>("objecter_fastfail_timeout");
+  }
 }
 
 void Objecter::update_crush_location()
@@ -2316,6 +2319,52 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
   bool check_for_latest_map = _calc_target(&op->target, nullptr)
     == RECALC_OP_TARGET_POOL_DNE;
 
+  if (op->tid == 0)
+    op->tid = ++last_tid;
+  if (objecter_fastfail_timeout  > timespan(0)) {
+    unique_lock fl(ffpgs.lock);
+    if (ffpgs.pgs.find(op->target.pgid) != ffpgs.pgs.end()) {
+      fl.unlock();
+      ldout(cct, 10) << "fastfail pg: " << op->target.pgid << " to list" << dendl;
+      // before cancelling check if the pg is still inactive
+      // TODO: find a better way to determine if a pg is inactive
+      if(op->target.acting.size() < op->target.min_size) {
+        boost::asio::dispatch(service,
+				      [this, tid=op->tid]() {
+                ldout(cct, 10) << "Cancel op" << dendl;
+                op_cancel(tid, -ETIMEDOUT);
+              });
+      } else {
+        unique_lock fl(ffpgs.lock);
+        ffpgs.pgs.erase(op->target.pgid);
+        fl.unlock();
+      }
+    } else {
+      fl.unlock();
+      op->onfastfail = timer.add_event(objecter_fastfail_timeout,
+				    [this, tid=op->tid, pgid=op->target.pgid, target=op->target, timeout=objecter_fastfail_timeout]() {
+              ldout(cct, 10) << "Enter pg processing" << dendl;
+              unique_lock fl(ffpgs.lock);
+              // TODO: find a better way to determine if a pg is inactive
+				      if (ffpgs.pgs.find(pgid) == ffpgs.pgs.end() && target.acting.size() < target.min_size) {
+                ldout(cct, 10) << "Insert pg: " << pgid << dendl;
+                ffpgs.pgs.insert(pgid);
+              }
+              fl.unlock();
+              ldout(cct, 10) << "Cancel op" << dendl;
+              op_cancel(tid, -ETIMEDOUT);
+
+              //cancel the fastfail timer
+              timer.add_event(objecter_fastfail_timeout,
+              [this, pgid]() {
+                ldout(cct, 10) << "Remove pg: " << pgid << " from list" << dendl;
+                unique_lock fl(ffpgs.lock);
+                ffpgs.pgs.erase(pgid);
+                fl.unlock();
+              });
+            });
+    }
+ }
   // Try to get a session, including a retry if we need to take write lock
   int r = _get_session(op->target.osd, &s, sul);
   if (r == -EAGAIN ||
@@ -2369,8 +2418,6 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
   }
 
   unique_lock sl(s->lock);
-  if (op->tid == 0)
-    op->tid = ++last_tid;
 
   ldout(cct, 10) << "_op_submit oid " << op->target.base_oid
 		 << " '" << op->target.base_oloc << "' '"
@@ -3087,6 +3134,8 @@ void Objecter::_finish_op(Op *op, int r)
     put_op_budget_bytes(op->budget);
     op->budget = -1;
   }
+  if (op->onfastfail && r != -ETIMEDOUT)
+    timer.cancel_event(op->onfastfail);
 
   if (op->ontimeout && r != -ETIMEDOUT)
     timer.cancel_event(op->ontimeout);
@@ -4915,6 +4964,7 @@ Objecter::Objecter(CephContext *cct,
 {
   mon_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
   osd_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
+  objecter_fastfail_timeout = cct->_conf.get_val<std::chrono::seconds>("objecter_fastfail_timeout");
 }
 
 Objecter::~Objecter()
