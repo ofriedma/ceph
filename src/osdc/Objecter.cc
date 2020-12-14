@@ -2322,49 +2322,49 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
   if (op->tid == 0)
     op->tid = ++last_tid;
   if (objecter_fastfail_timeout  > timespan(0)) {
-    unique_lock fl(ffpgs.lock);
+    unique_lock fl(ffpgs.lock); // fastfail read lock
     if (ffpgs.pgs.find(op->target.pgid) != ffpgs.pgs.end()) {
-      fl.unlock();
-      ldout(cct, 10) << "fastfail pg: " << op->target.pgid << " to list" << dendl;
+      fl.unlock(); // unlock fastfail read lock
+      ldout(cct, 10) << "pg: " << op->target.pgid << " is in the fastfail list" << dendl;
       // before cancelling check if the pg is still inactive
       // TODO: find a better way to determine if a pg is inactive
       if(op->target.acting.size() < op->target.min_size) {
         boost::asio::dispatch(service,
 				      [this, tid=op->tid]() {
-                ldout(cct, 10) << "Cancel op" << dendl;
+                ldout(cct, 10) << "Op's target pg is still inactive cancelling op tid: " << tid << dendl;
                 op_cancel(tid, -ETIMEDOUT);
               });
       } else {
-        unique_lock fl(ffpgs.lock);
+        ldout(cct, 10) << "Remove pg from fastfail list pg: " << op->target.pgid << dendl;
+        unique_lock fl(ffpgs.lock); // fastfail write lock
         ffpgs.pgs.erase(op->target.pgid);
-        fl.unlock();
+        fl.unlock(); // unlock fastfail write lock
       }
     } else {
-      fl.unlock();
+      fl.unlock(); // unlock read lock
       op->onfastfail = timer.add_event(objecter_fastfail_timeout,
-				    [this, tid=op->tid, pgid=op->target.pgid, target=op->target, timeout=objecter_fastfail_timeout]() {
-              ldout(cct, 10) << "Enter pg processing" << dendl;
-              unique_lock fl(ffpgs.lock);
+				    [this, tid=op->tid, pgid=op->target.pgid, target=op->target]() {
+              ldout(cct, 10) << "Enter fastfail lambda" << dendl;
               // TODO: find a better way to determine if a pg is inactive
-				      if (ffpgs.pgs.find(pgid) == ffpgs.pgs.end() && target.acting.size() < target.min_size) {
-                ldout(cct, 10) << "Insert pg: " << pgid << dendl;
+              if (target.acting.size() < target.min_size) {
+                unique_lock fl(ffpgs.lock); // fastfail write lock
+                ldout(cct, 10) << "Insert pg: " << pgid <<  " to fastfail list" << dendl;
                 ffpgs.pgs.insert(pgid);
+                fl.unlock(); // unlock fastfail write lock
+                ldout(cct, 10) << "Cancel op due to fastfail timeout tid: " << tid << " pgid: " << pgid << dendl;
+                op_cancel(tid, -ETIMEDOUT);
+                //cancel the fastfail timer
+                timer.add_event(objecter_fastfail_timeout,
+                [this, pgid]() {
+                  ldout(cct, 10) << "Remove pg: " << pgid << " from fastfail list" << dendl;
+                  unique_lock fl(ffpgs.lock); // fastfail write lock
+                  ffpgs.pgs.erase(pgid);
+                  fl.unlock(); // unlock fastfail write lock
+                });
               }
-              fl.unlock();
-              ldout(cct, 10) << "Cancel op" << dendl;
-              op_cancel(tid, -ETIMEDOUT);
-
-              //cancel the fastfail timer
-              timer.add_event(objecter_fastfail_timeout,
-              [this, pgid]() {
-                ldout(cct, 10) << "Remove pg: " << pgid << " from list" << dendl;
-                unique_lock fl(ffpgs.lock);
-                ffpgs.pgs.erase(pgid);
-                fl.unlock();
-              });
             });
+      }
     }
- }
   // Try to get a session, including a retry if we need to take write lock
   int r = _get_session(op->target.osd, &s, sul);
   if (r == -EAGAIN ||
