@@ -184,7 +184,7 @@ def start_rgw(ctx, config, clients):
                 args=cmd,
                 logger=log.getChild(client),
                 stdin=run.PIPE,
-                wait=True,
+                wait=False,
                 )
         systemctl_cmds = []
         systemctl_cmds.append("systemctl enable ceph-radosgw@" + client_with_id)
@@ -196,7 +196,7 @@ def start_rgw(ctx, config, clients):
                 args=cmd,
                 logger=log.getChild(client),
                 stdin=run.PIPE,
-                wait=True,
+                wait=False,
                 )        
 
     # XXX: add_daemon() doesn't let us wait until radosgw finishes startup
