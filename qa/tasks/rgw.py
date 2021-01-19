@@ -62,7 +62,7 @@ def start_rgw(ctx, config, clients):
         log.info("Using %s as radosgw frontend", ctx.rgw.frontend)
 
         endpoint = ctx.rgw.role_endpoints[client]
-        frontends = ctx.rgw.frontend
+        frontends = "\"" + ctx.rgw.frontend
         frontend_prefix = client_config.get('frontend_prefix', None)
         if frontend_prefix:
             frontends += ' prefix={pfx}'.format(pfx=frontend_prefix)
@@ -76,7 +76,7 @@ def start_rgw(ctx, config, clients):
                 frontends += ' ssl_port={}'.format(endpoint.port)
         else:
             frontends += ' port={}'.format(endpoint.port)
-        client_cmd.append(base_cmd + "rgw_frontends " + frontends)
+        client_cmd.append(base_cmd + "rgw_frontends " + frontends + "\"")
         client_cmd.append(base_cmd + "keyring " + '/etc/ceph/{client_with_cluster}.keyring'.format(client_with_cluster=client_with_cluster))
         client_cmd.append(base_cmd + "log_file " + '/var/log/ceph/rgw.{client_with_cluster}.log'.format(client_with_cluster=client_with_cluster))
         client_cmd.append(base_cmd + "rgw_ops_log_socket_path " + '{tdir}/rgw.opslog.{client_with_cluster}.sock'.format(tdir=testdir,client_with_cluster=client_with_cluster))
