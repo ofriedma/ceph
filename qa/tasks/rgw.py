@@ -187,8 +187,8 @@ def start_rgw(ctx, config, clients):
                 wait=False,
                 )
         systemctl_cmds = []
-        systemctl_cmds.append("systemctl enable ceph-radosgw@" + client_with_id)
-        systemctl_cmds.append("systemctl start ceph-radosgw@" + client_with_id)
+        systemctl_cmds.append("sudo systemctl enable ceph-radosgw@" + client_with_id)
+        systemctl_cmds.append("sudo systemctl start ceph-radosgw@" + client_with_id)
         for cmd in systemctl_cmds:
             ctx.daemons.add_daemon(
                 remote, 'rgw', client_with_id,
