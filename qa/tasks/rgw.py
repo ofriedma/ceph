@@ -40,7 +40,7 @@ def start_rgw(ctx, config, clients):
         (remote,) = ctx.cluster.only(client).remotes.keys()
         cluster_name, daemon_type, client_id = teuthology.split_role(client)
         client_with_id = daemon_type + '.' + client_id
-        base_cmd = "sudo ceph config set " + client_with_id + " "
+        base_cmd = "sudo ceph --cluster " + cluster_name + " config set " + client_with_id + " "
         client_cmd = []
         client_with_cluster = cluster_name + '.' + client_with_id
 
