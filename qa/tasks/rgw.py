@@ -77,7 +77,8 @@ def start_rgw(ctx, config, clients):
         else:
             frontends += ' port={}'.format(endpoint.port)
         client_cmd.append(base_cmd + "rgw_frontends " + frontends + "\"")
-        #client_cmd.append(base_cmd + "keyring " + '/etc/ceph/{client_with_cluster}.keyring'.format(client_with_cluster=client_with_cluster))
+        client_cmd.append("sudo cp " + '/etc/ceph/{client_with_cluster}.keyring'.format(client_with_cluster=client_with_cluster) + " " + "/var/lib/ceph/radosgw/" + cluster_name + "-rgw." + client_with_id + "/keyring")
+        #/var/lib/ceph/radosgw/ceph-rgw.client.0/keyring
         client_cmd.append(base_cmd + "log_file " + '/var/log/ceph/rgw.{client_with_cluster}.log'.format(client_with_cluster=client_with_cluster))
         client_cmd.append(base_cmd + "rgw_ops_log_socket_path " + '{tdir}/rgw.opslog.{client_with_cluster}.sock'.format(tdir=testdir,client_with_cluster=client_with_cluster))
         """
