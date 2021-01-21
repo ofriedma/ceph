@@ -186,8 +186,8 @@ def start_rgw(ctx, config, clients):
             log.info(cmd)
             ctx.cluster.only(client).run(args=cmd)
         systemctl_cmds = []
-        systemctl_cmds.append("sudo systemctl enable ceph-radosgw@rgw." + client_with_id)
-        systemctl_cmds.append("sudo systemctl start ceph-radosgw@rgw." + client_with_id)
+        systemctl_cmds.append("sudo systemctl enable ceph-radosgw@" + client_with_id)
+        systemctl_cmds.append("sudo systemctl start ceph-radosgw@" + client_with_id)
         for cmd in systemctl_cmds:
             log.info(cmd)
             ctx.cluster.only(client).run(args=cmd)
