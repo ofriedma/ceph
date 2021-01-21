@@ -85,9 +85,9 @@ def start_rgw(ctx, config, clients):
         client_cmd.append("sudo ceph auth get " + client_with_id  + " -o " + "/var/lib/ceph/radosgw/" + cluster_name + "-" + client_with_id + "/keyring")
         client_cmd.append("sudo chmod 600 " + "/var/lib/ceph/radosgw/" + cluster_name + "-" + client_with_id + "/keyring")
         #/var/lib/ceph/radosgw/ceph-rgw.client.0/keyring
-        client_cmd.append(base_cmd + "debug_ms 20")
-        client_cmd.append(base_cmd + "debug_auth 20")
-        client_cmd.append(base_cmd + "debug_monc 20")
+        client_cmd.append("sudo ceph --cluster " + cluster_name + " config set client" + "debug_ms 20")
+        client_cmd.append("sudo ceph --cluster " + cluster_name + " config set client" + "debug_auth 20")
+        client_cmd.append("sudo ceph --cluster " + cluster_name + " config set client" + "debug_monc 20")
         client_cmd.append(base_cmd + "log_file " + '/var/log/ceph/rgw.{client_with_cluster}.log'.format(client_with_cluster=client_with_cluster))
         client_cmd.append(base_cmd + "rgw_ops_log_socket_path " + '{tdir}/rgw.opslog.{client_with_cluster}.sock'.format(tdir=testdir,client_with_cluster=client_with_cluster))
         """
