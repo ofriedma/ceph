@@ -81,7 +81,7 @@ def start_rgw(ctx, config, clients):
         #client_cmd.append("sudo ceph auth get-or-create " + client_with_id  + " osd \'allow rwx\' mon \'allow rw\' -o " + "/var/lib/ceph/radosgw/" + cluster_name + "-rgw." + client_with_id + "/keyring")
 #        client_cmd.append("sudo cp " + '/etc/ceph/{client_with_cluster}.keyring'.format(client_with_cluster=client_with_cluster) + " " + "/var/lib/ceph/radosgw/" + cluster_name + "-rgw." + client_with_id + "/keyring")
         client_cmd.append("sudo chown -R ceph " + "/var/lib/ceph")
-        client_cmd.append("sudo ceph auth caps " + client_with_id + " osd \'allow rwx\' mon \'allow rw\' mgr \'allow rw\'")
+        client_cmd.append("sudo ceph auth caps " + client_with_id + " osd \'allow *\' mon \'allow *\' mgr \'allow *\'")
         client_cmd.append("sudo ceph auth get " + client_with_id  + " -o " + "/var/lib/ceph/radosgw/" + cluster_name + "-" + client_with_id + "/keyring")
         client_cmd.append("sudo chmod 600 " + "/var/lib/ceph/radosgw/" + cluster_name + "-" + client_with_id + "/keyring")
         #/var/lib/ceph/radosgw/ceph-rgw.client.0/keyring
