@@ -209,7 +209,8 @@ def start_rgw(ctx, config, clients):
             cluster_name, daemon_type, client_id = teuthology.split_role(client)
             client_with_id = daemon_type + '.' + client_id
             client_with_cluster = cluster_name + '.' + client_with_id
-            ctx.daemons.get_daemon('rgw', client_with_id, cluster_name).stop()
+            #ctx.daemons.get_daemon('rgw', client_with_id, cluster_name).stop()
+            ctx.cluster.only(client).run(args="sudo systemctl stop ceph-radosgw@" + client_id)
             ctx.cluster.only(client).run(
                 args=[
                     'rm',
