@@ -77,7 +77,7 @@ def start_rgw(ctx, config, clients):
         else:
             frontends += ' port={}'.format(endpoint.port)
         client_cmd.append(base_cmd + "rgw_frontends " + frontends + "\"")
-        client_cmd.append("sudo mkdir -p " + "/var/lib/ceph/radosgw/" + cluster_name + "-" + client_with_id)
+        client_cmd.append("sudo mkdir -p " + "/var/lib/ceph/radosgw/" + cluster_name + "-" + client_id)
         #client_cmd.append("sudo ceph auth get-or-create " + client_with_id  + " osd \'allow rwx\' mon \'allow rw\' -o " + "/var/lib/ceph/radosgw/" + cluster_name + "-rgw." + client_with_id + "/keyring")
 #        client_cmd.append("sudo cp " + '/etc/ceph/{client_with_cluster}.keyring'.format(client_with_cluster=client_with_cluster) + " " + "/var/lib/ceph/radosgw/" + cluster_name + "-rgw." + client_with_id + "/keyring")
         client_cmd.append("sudo ceph auth caps " + client_with_id + " osd \'allow *\' mon \'allow *\' mgr \'allow *\'")
