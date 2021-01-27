@@ -80,14 +80,11 @@ def start_rgw(ctx, config, clients):
         client_cmd.append("sudo mkdir -p " + "/var/lib/ceph/radosgw/" + cluster_name + "-" + client_with_id)
         #client_cmd.append("sudo ceph auth get-or-create " + client_with_id  + " osd \'allow rwx\' mon \'allow rw\' -o " + "/var/lib/ceph/radosgw/" + cluster_name + "-rgw." + client_with_id + "/keyring")
 #        client_cmd.append("sudo cp " + '/etc/ceph/{client_with_cluster}.keyring'.format(client_with_cluster=client_with_cluster) + " " + "/var/lib/ceph/radosgw/" + cluster_name + "-rgw." + client_with_id + "/keyring")
-        client_cmd.append("sudo chown -R ceph " + "/var/lib/ceph")
         client_cmd.append("sudo ceph auth caps " + client_with_id + " osd \'allow *\' mon \'allow *\' mgr \'allow *\'")
-        client_cmd.append("sudo ceph auth get " + client_with_id  + " -o " + "/var/lib/ceph/radosgw/" + cluster_name + "-" + client_with_id + "/keyring")
-        client_cmd.append("sudo chmod 600 " + "/var/lib/ceph/radosgw/" + cluster_name + "-" + client_with_id + "/keyring")
+        client_cmd.append("sudo ceph auth get " + client_with_id  + " -o " + "/var/lib/ceph/radosgw/" + cluster_name + "-" + client_id + "/keyring")
+        client_cmd.append("sudo chown -R ceph " + "/var/lib/ceph")
+        client_cmd.append("sudo chmod 600 " + "/var/lib/ceph/radosgw/" + cluster_name + "-" + client_id + "/keyring")
         #/var/lib/ceph/radosgw/ceph-rgw.client.0/keyring
-        client_cmd.append("sudo ceph --cluster " + cluster_name + " config set client " + "debug_ms 20")
-        client_cmd.append("sudo ceph --cluster " + cluster_name + " config set client " + "debug_auth 20")
-        client_cmd.append("sudo ceph --cluster " + cluster_name + " config set client " + "debug_monc 20")
         client_cmd.append(base_cmd + "log_file " + '/var/log/ceph/rgw.{client_with_cluster}.log'.format(client_with_cluster=client_with_cluster))
         client_cmd.append(base_cmd + "rgw_ops_log_socket_path " + '{tdir}/rgw.opslog.{client_with_cluster}.sock'.format(tdir=testdir,client_with_cluster=client_with_cluster))
         """
@@ -191,8 +188,8 @@ def start_rgw(ctx, config, clients):
             log.info(cmd)
             ctx.cluster.only(client).run(args=cmd)
         systemctl_cmds = []
-        systemctl_cmds.append("sudo systemctl enable ceph-radosgw@" + client_with_id)
-        systemctl_cmds.append("sudo systemctl start ceph-radosgw@" + client_with_id)
+        systemctl_cmds.append("sudo systemctl enable ceph-radosgw@" + client_id)
+        systemctl_cmds.append("sudo systemctl start ceph-radosgw@" + client_id)
         for cmd in systemctl_cmds:
             log.info(cmd)
             ctx.cluster.only(client).run(args=cmd)
