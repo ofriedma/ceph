@@ -55,7 +55,8 @@ def start_rgw(ctx, config, clients):
             'daemon-helper',
             'term',
             ]
-        base_cmd = cmd_prefix + " ceph --cluster " + cluster_name + " config set " + client_with_id + " "
+        cmd_prefix_str = 'sudo ' + 'adjust-ulimits ' + 'ceph-coverage ' + '{tdir}/archive/coverage '.format(tdir=testdir) + 'daemon-helper ' + 'term'
+        base_cmd = cmd_prefix_str + " ceph --cluster " + cluster_name + " config set " + client_with_id + " "
         rgw_cmd = ['radosgw']
 
         log.info("Using %s as radosgw frontend", ctx.rgw.frontend)
