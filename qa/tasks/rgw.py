@@ -40,7 +40,6 @@ def start_rgw(ctx, config, clients):
         (remote,) = ctx.cluster.only(client).remotes.keys()
         cluster_name, daemon_type, client_id = teuthology.split_role(client)
         client_with_id = daemon_type + '.' + client_id
-        base_cmd = "sudo ceph --cluster " + cluster_name + " config set " + client_with_id + " "
         client_cmd = []
         client_with_cluster = cluster_name + '.' + client_with_id
 
@@ -56,7 +55,7 @@ def start_rgw(ctx, config, clients):
             'daemon-helper',
             'term',
             ]
-
+        base_cmd = cmd_prefix + " ceph --cluster " + cluster_name + " config set " + client_with_id + " "
         rgw_cmd = ['radosgw']
 
         log.info("Using %s as radosgw frontend", ctx.rgw.frontend)
@@ -78,28 +77,13 @@ def start_rgw(ctx, config, clients):
             frontends += ' port={}'.format(endpoint.port)
         client_cmd.append(base_cmd + "rgw_frontends " + frontends + "\"")
         client_cmd.append("sudo mkdir -p " + "/var/lib/ceph/radosgw/" + cluster_name + "-" + client_id)
-        #client_cmd.append("sudo ceph auth get-or-create " + client_with_id  + " osd \'allow rwx\' mon \'allow rw\' -o " + "/var/lib/ceph/radosgw/" + cluster_name + "-rgw." + client_with_id + "/keyring")
-#        client_cmd.append("sudo cp " + '/etc/ceph/{client_with_cluster}.keyring'.format(client_with_cluster=client_with_cluster) + " " + "/var/lib/ceph/radosgw/" + cluster_name + "-rgw." + client_with_id + "/keyring")
-        client_cmd.append("sudo ceph auth caps " + client_with_id + " osd \'allow *\' mon \'allow *\' mgr \'allow *\'")
         client_cmd.append("sudo ceph auth get " + client_with_id  + " -o " + "/var/lib/ceph/radosgw/" + cluster_name + "-" + client_id + "/keyring")
         client_cmd.append("sudo chown -R ceph " + "/var/lib/ceph")
+        # /var/lib/ceph/radosgw/ this is the default location as we can't use ceph config set client.X keyring keyring_path because keyring can be configured only by config file
         client_cmd.append("sudo chmod 600 " + "/var/lib/ceph/radosgw/" + cluster_name + "-" + client_id + "/keyring")
-        #/var/lib/ceph/radosgw/ceph-rgw.client.0/keyring
         client_cmd.append(base_cmd + "log_file " + '/var/log/ceph/rgw.{client_with_cluster}.log'.format(client_with_cluster=client_with_cluster))
         client_cmd.append(base_cmd + "rgw_ops_log_socket_path " + '{tdir}/rgw.opslog.{client_with_cluster}.sock'.format(tdir=testdir,client_with_cluster=client_with_cluster))
-        """
-        rgw_cmd.extend([
-            '--rgw-frontends', frontends,
-            '-n', client_with_id,
-            '--cluster', cluster_name,
-            '-k', '/etc/ceph/{client_with_cluster}.keyring'.format(client_with_cluster=client_with_cluster),
-            '--log-file',
-            '/var/log/ceph/rgw.{client_with_cluster}.log'.format(client_with_cluster=client_with_cluster),
-            '--rgw_ops_log_socket_path',
-            '{tdir}/rgw.opslog.{client_with_cluster}.sock'.format(tdir=testdir,
-                                                     client_with_cluster=client_with_cluster),
-	    ])
-        """
+
         keystone_role = client_config.get('use-keystone-role', None)
         if keystone_role is not None:
             if not ctx.keystone:
@@ -121,10 +105,8 @@ def start_rgw(ctx, config, clients):
 
         if client_config.get('dns-name') is not None:
             client_cmd.append(base_cmd + "rgw-dns-name " + endpoint.dns_name)
-            #rgw_cmd.extend(['--rgw-dns-name', endpoint.dns_name])
         if client_config.get('dns-s3website-name') is not None:
             client_cmd.append(base_cmd + "dns-s3website-name " +  endpoint.website_dns_name)
-            #rgw_cmd.extend(['--rgw-dns-s3website-name', endpoint.website_dns_name])
 
 
         vault_role = client_config.get('use-vault-role', None)
@@ -139,13 +121,7 @@ def start_rgw(ctx, config, clients):
                 ctx.barbican.endpoints[barbican_role]
             log.info("Use barbican url=%s:%s", barbican_host, barbican_port)
             client_cmd.append(base_cmd + "rgw_barbican_url " + 'http://{bhost}:{bport}'.format(bhost=barbican_host,bport=barbican_port))
-            """
-            rgw_cmd.extend([
-                '--rgw_barbican_url',
-                'http://{bhost}:{bport}'.format(bhost=barbican_host,
-                                                bport=barbican_port),
-                ])
-            """
+
         elif vault_role is not None:
             if not ctx.vault.root_token:
                 raise ConfigError('vault: no "root_token" specified')
@@ -158,22 +134,7 @@ def start_rgw(ctx, config, clients):
             ctx.cluster.only(client).run(args=['sudo', 'chown', 'ceph', token_path])
             client_cmd.append(base_cmd + "rgw_crypt_vault_addr " + "{}:{}".format(*ctx.vault.endpoints[vault_role]))
             client_cmd.append(base_cmd + "rgw_crypt_vault_token_file " + token_path)
-            """
-            rgw_cmd.extend([
-                '--rgw_crypt_vault_addr', "{}:{}".format(*ctx.vault.endpoints[vault_role]),
-                '--rgw_crypt_vault_token_file', token_path
-            ])
-            """
-        """
-        rgw_cmd.extend([
-            '--foreground',
-            run.Raw('|'),
-            'sudo',
-            'tee',
-            '/var/log/ceph/rgw.{client_with_cluster}.stdout'.format(client_with_cluster=client_with_cluster),
-            run.Raw('2>&1'),
-            ])
-        """
+
         if client_config.get('valgrind'):
             cmd_prefix = teuthology.get_valgrind_args(
                 testdir,
@@ -209,7 +170,6 @@ def start_rgw(ctx, config, clients):
             cluster_name, daemon_type, client_id = teuthology.split_role(client)
             client_with_id = daemon_type + '.' + client_id
             client_with_cluster = cluster_name + '.' + client_with_id
-            #ctx.daemons.get_daemon('rgw', client_with_id, cluster_name).stop()
             ctx.cluster.only(client).run(args="sudo systemctl stop ceph-radosgw@" + client_id)
             ctx.cluster.only(client).run(
                 args=[
